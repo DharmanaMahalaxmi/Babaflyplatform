@@ -1,17 +1,17 @@
-from sqlalchemy.orm import Session
+.from sqlalchemy.orm import Session
+from app.schemas.user import UserRegister, UserLogin
+from app.services.user_service import UserService
 from app.models.user import User
-from app.schemas.order import OrderCreate
-from app.services.order_service import OrderService
 
-class OrderController:
+class UserController:
     @staticmethod
-    def create(db: Session, order_data: OrderCreate, current_user: User):
-        return OrderService.create_order(db, order_data, current_user)
+    def register(db: Session, user_data: UserRegister):
+        return UserService.register_user(db, user_data)
 
     @staticmethod
-    def get_user_orders(db: Session, current_user: User):
-        return OrderService.get_user_orders(db, current_user)
+    def login(db: Session, login_data: UserLogin):
+        return UserService.authenticate_user(db, login_data)
 
     @staticmethod
-    def get_by_id(db: Session, order_id: int, current_user: User):
-        return OrderService.get_order_by_id(db, order_id, current_user)
+    def get_profile(current_user: User):
+        return current_user
