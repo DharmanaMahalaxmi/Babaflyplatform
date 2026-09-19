@@ -1,0 +1,6 @@
+{
+  "name": "BabaFly Backend Platform",
+  "description": "Production-ready Python FastAPI backend and interactive API suite for BabaFly with authentication, products, categories, orders, filters, and automated tests.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
