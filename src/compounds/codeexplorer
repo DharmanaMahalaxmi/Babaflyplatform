@@ -1,0 +1,114 @@
+import { useState } from 'react';
+import { Download, Copy, Check, FileCode, Folder, ChevronRight, ChevronDown, CheckCircle2 } from 'lucide-react';
+import { PYTHON_PROJECT_FILES, CodeFile } from '../backend/pythonCodeFiles';
+
+interface CodeExplorerProps {
+  onDownloadZip: () => void;
+}
+
+export function CodeExplorer({ onDownloadZip }: CodeExplorerProps) {
+  const [selectedFile, setSelectedFile] = useState<CodeFile>(PYTHON_PROJECT_FILES[0]);
+  const [copied, setCopied] = useState<boolean>(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(selectedFile.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const categories = Array.from(new Set(PYTHON_PROJECT_FILES.map((f) => f.category)));
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {/* Header Banner */}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-6 rounded-2xl">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold text-white tracking-tight">Python FastAPI Project Repository</h2>
+            <span className="text-xs bg-amber-500/15 border border-amber-500/30 text-amber-300 px-2 py-0.5 rounded-full font-mono">
+              MVC / MVT Architecture
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 mt-1 max-w-xl">
+            Clean PEP8 Python code with Pydantic v2, SQLAlchemy ORM, JWT security, custom error-handling middleware, and 5 automated tests.
+          </p>
+        </div>
+
+        <button
+          onClick={onDownloadZip}
+          className="flex items-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs px-5 py-2.5 rounded-xl shadow-lg transition-all cursor-pointer"
+        >
+          <Download className="w-4 h-4" />
+          <span>Download Entire Project (.ZIP)</span>
+        </button>
+      </div>
+
+      {/* Grid: File Explorer Sidebar & File Content */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left: File Tree */}
+        <div className="lg:col-span-4 bg-slate-900 border border-slate-800 rounded-xl p-4 overflow-hidden">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-3">
+            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+              <Folder className="w-3.5 h-3.5 text-amber-400" />
+              <span>Project Structure</span>
+            </span>
+            <span className="text-[10px] text-slate-500 font-mono">{PYTHON_PROJECT_FILES.length} files</span>
+          </div>
+
+          <div className="space-y-4 max-h-[620px] overflow-y-auto pr-1">
+            {categories.map((cat) => (
+              <div key={cat}>
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5 px-2">
+                  {cat}
+                </span>
+                <div className="space-y-1">
+                  {PYTHON_PROJECT_FILES.filter((f) => f.category === cat).map((file) => {
+                    const isSelected = selectedFile.path === file.path;
+                    return (
+                      <button
+                        key={file.path}
+                        onClick={() => setSelectedFile(file)}
+                        className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-mono flex items-center gap-2 transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40'
+                            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                        }`}
+                      >
+                        <FileCode className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-amber-400' : 'text-slate-500'}`} />
+                        <span className="truncate">{file.path}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Right: Code Viewer */}
+        <div className="lg:col-span-8 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col">
+          <div className="px-5 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/80">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono text-amber-300 font-bold">{selectedFile.path}</span>
+              <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400">
+                {selectedFile.language}
+              </span>
+            </div>
+
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 px-3 py-1 rounded-lg transition-all cursor-pointer"
+            >
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copied ? 'Copied' : 'Copy Code'}</span>
+            </button>
+          </div>
+
+          <pre className="p-5 font-mono text-xs text-slate-200 overflow-x-auto bg-slate-950 leading-relaxed max-h-[600px] flex-1">
+            <code>{selectedFile.content}</code>
+          </pre>
+        </div>
+      </div>
+    </div>
+  );
+}
