@@ -1,0 +1,81 @@
+from typing import Optional
+from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy.orm import Session
+from app.config.database import get_db
+from app.models.user import User
+from app.schemas.product import ProductCreate, ProductUpdate, ProductOut, ProductListResponse
+from app.controllers.product_controller import ProductController
+from app.utils.security import get_current_admin
+
+router = APIRouter(prefix="/products", tags=["Products"])
+
+@router.get("", response_model=ProductListResponse, summary="List products with filtering, sorting & pagination")
+def list_products(
+    price_min: Optional[float] = Query(None, description="Filter products with price >= price_min"),
+    price_max: Optional[float] = Query(None, description="Filter products with price <= price_max"),
+    metal: Optional[str] = Query(None, description="Filter by metal type (e.g. Gold, Silver, Platinum)"),
+    polish: Optional[str] = Query(None, description="Filter by polish type (e.g. High Polish, Matte, Antique)"),
+    sort: Optional[str] = Query("latest", regex="^(latest|price_low|price_high|rating|popularity)$", description="Sort order"),
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    limit: int = Query(10, ge=1, le=100, description="Items per page"),
+    db: Session = Depends(get_db)
+):
+    """
+    Fetch all products with optional filters:
+    - `price_min` & `price_max`: Price range
+    - `metal`: Metal type filter (e.g., Gold, Platinum, Silver, Rose Gold)
+    - `polish`: Polish finish filter (e.g., High Polish, Matte, Antique)
+    - `sort`: `latest`, `price_low`, `price_high`, `rating`, `popularity`
+    - `page` & `limit`: Standard offset pagination
+    """
+    return ProductController.get_all(
+        db=db,
+        price_min=price_min,
+        price_max=price_max,
+        metal=metal,
+        polish=polish,
+        sort=sort,
+        page=page,
+        limit=limit,
+    )
+
+@router.get("/{id}", response_model=ProductOut, summary="Get single product by ID")
+def get_product(id: int, db: Session = Depends(get_db)):
+    """
+    Retrieve full details for a single product by primary key ID.
+    """
+    return ProductController.get_one(db=db, product_id=id)
+
+@router.post("", response_model=ProductOut, status_code=status.HTTP_201_CREATED, summary="Create new product (Admin Only)")
+def create_product(
+    data: ProductCreate,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Admin only: Create a new jewelry or merchandise product in the catalog.
+    """
+    return ProductController.create(db=db, data=data)
+
+@router.put("/{id}", response_model=ProductOut, summary="Update product by ID (Admin Only)")
+def update_product(
+    id: int,
+    data: ProductUpdate,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Admin only: Update fields of an existing product.
+    """
+    return ProductController.update(db=db, product_id=id, data=data)
+
+@router.delete("/{id}", summary="Delete product by ID (Admin Only)")
+def delete_product(
+    id: int,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Admin only: Permanently remove a product from the catalog.
+    """
+    return ProductController.delete(db=db, product_id=id)
