@@ -1,0 +1,45 @@
+from typing import List
+from fastapi import APIRouter, Depends, status
+from sqlalchemy.orm import Session
+from app.config.database import get_db
+from app.models.user import User
+from app.schemas.order import OrderCreate, OrderOut
+from app.controllers.order_controller import OrderController
+from app.utils.security import get_current_user
+
+router = APIRouter(prefix="/orders", tags=["Orders"])
+
+@router.post("", response_model=OrderOut, status_code=status.HTTP_201_CREATED, summary="Create a new customer order")
+def create_order(
+    order_data: OrderCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Authenticated route: Places a new customer order.
+    Requires valid JWT token. Links order to authenticated user id.
+    """
+    return OrderController.create(db=db, order_data=order_data, current_user=current_user)
+
+@router.get("", response_model=List[OrderOut], summary="List orders for current user (or all if admin)")
+def list_orders(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Authenticated route: Retrieves order history for the authenticated user.
+    If the user has role 'admin', returns all platform orders.
+    """
+    return OrderController.get_user_orders(db=db, current_user=current_user)
+
+@router.get("/{id}", response_model=OrderOut, summary="Get single order details by ID")
+def get_order_by_id(
+    id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Authenticated route: Retrieves details for a specific order.
+    Users can only view their own orders unless they have admin role.
+    """
+    return OrderController.get_by_id(db=db, order_id=id, current_user=current_user)
