@@ -1,0 +1,611 @@
+import { useState, FormEvent } from 'react';
+import { 
+  UserPlus, 
+  CheckCircle2, 
+  XCircle, 
+  ShieldCheck, 
+  ShieldAlert, 
+  Play, 
+  RefreshCw, 
+  Key, 
+  ShoppingBag, 
+  ArrowRight, 
+  Sparkles, 
+  X, 
+  UserCheck, 
+  FileText 
+} from 'lucide-react';
+import { User } from '../types';
+import { backendEngine } from '../backend/engine';
+
+interface NewUserCheckerProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSelectUser: (user: User, token: string) => void;
+  currentUserId?: number;
+}
+
+interface StepLog {
+  step: number;
+  title: string;
+  endpoint: string;
+  status: 'pending' | 'running' | 'passed' | 'failed';
+  details: string;
+  response?: any;
+}
+
+export function NewUserChecker({
+  isOpen,
+  onClose,
+  onSelectUser,
+  currentUserId,
+}: NewUserCheckerProps) {
+  const [activeSubTab, setActiveSubTab] = useState<'automated' | 'manual' | 'directory'>('automated');
+
+  // Automated test state
+  const [isRunningTest, setIsRunningTest] = useState(false);
+  const [testUser, setTestUser] = useState<User | null>(null);
+  const [testToken, setTestToken] = useState<string | null>(null);
+  const [steps, setSteps] = useState<StepLog[]>([
+    {
+      step: 1,
+      title: 'Register New User',
+      endpoint: 'POST /api/users/register',
+      status: 'pending',
+      details: 'Registers a fresh user with unique email and bcrypt salted hash.',
+    },
+    {
+      step: 2,
+      title: 'Duplicate Email Validation Check',
+      endpoint: 'POST /api/users/register (Re-attempt)',
+      status: 'pending',
+      details: 'Ensures database rejects duplicate email with HTTP 400 Bad Request.',
+    },
+    {
+      step: 3,
+      title: 'Obtain JWT Bearer Token',
+      endpoint: 'POST /api/users/login',
+      status: 'pending',
+      details: 'Authenticates new credentials and retrieves HS256 JWT access token.',
+    },
+    {
+      step: 4,
+      title: 'Protected Profile Verification',
+      endpoint: 'GET /api/users/profile',
+      status: 'pending',
+      details: 'Validates Bearer token authorization header and sanitizes password.',
+    },
+    {
+      step: 5,
+      title: 'Enforce RBAC Protection (Admin Block)',
+      endpoint: 'POST /api/products',
+      status: 'pending',
+      details: 'Tests security rule: Standard user attempting product creation gets HTTP 403 Forbidden.',
+    },
+    {
+      step: 6,
+      title: 'User Places Order',
+      endpoint: 'POST /api/orders',
+      status: 'pending',
+      details: 'Places verified customer purchase authorized by new user JWT.',
+    },
+    {
+      step: 7,
+      title: 'Fetch User Order History',
+      endpoint: 'GET /api/orders',
+      status: 'pending',
+      details: 'Retrieves user-scoped order list confirming customer isolation.',
+    },
+  ]);
+
+  // Manual registration state
+  const [manualForm, setManualForm] = useState({
+    name: 'Nikhil Kumar',
+    email: `nikhil.${Math.floor(100 + Math.random() * 900)}@example.com`,
+    password: 'Password@2026!',
+    role: 'user',
+  });
+  const [manualLoading, setManualLoading] = useState(false);
+  const [manualResult, setManualResult] = useState<{ success: boolean; message: string; user?: User; token?: string } | null>(null);
+
+  if (!isOpen) return null;
+
+  // Run automated check
+  const runAutomatedCheck = async () => {
+    setIsRunningTest(true);
+    const uniqueEmail = `newuser.${Date.now().toString().slice(-6)}@babafly.com`;
+    const password = 'TestPassword123!';
+    const name = 'Alex Rivera (New Customer)';
+
+    // Reset steps
+    setSteps((prev) => prev.map((s) => ({ ...s, status: 'pending', response: undefined })));
+
+    try {
+      // Step 1: Register
+      setSteps((prev) => prev.map((s) => (s.step === 1 ? { ...s, status: 'running' } : s)));
+      await new Promise((r) => setTimeout(r, 400));
+      const regRes = await backendEngine.handleRequest('POST', '/api/users/register', {}, {
+        name,
+        email: uniqueEmail,
+        password,
+        role: 'user',
+      });
+      if (regRes.status !== 201) throw new Error(`Registration failed with status ${regRes.status}`);
+      setSteps((prev) => prev.map((s) => (s.step === 1 ? { ...s, status: 'passed', response: regRes.data } : s)));
+
+      // Step 2: Duplicate check
+      setSteps((prev) => prev.map((s) => (s.step === 2 ? { ...s, status: 'running' } : s)));
+      await new Promise((r) => setTimeout(r, 350));
+      const dupRes = await backendEngine.handleRequest('POST', '/api/users/register', {}, {
+        name,
+        email: uniqueEmail,
+        password,
+        role: 'user',
+      });
+      if (dupRes.status !== 400) throw new Error(`Expected 400 for duplicate email, got ${dupRes.status}`);
+      setSteps((prev) => prev.map((s) => (s.step === 2 ? { ...s, status: 'passed', response: dupRes.data } : s)));
+
+      // Step 3: Login
+      setSteps((prev) => prev.map((s) => (s.step === 3 ? { ...s, status: 'running' } : s)));
+      await new Promise((r) => setTimeout(r, 400));
+      const loginRes = await backendEngine.handleRequest('POST', '/api/users/login', {}, {
+        email: uniqueEmail,
+        password,
+      });
+      if (loginRes.status !== 200 || !loginRes.data?.access_token) {
+        throw new Error(`Login failed with status ${loginRes.status}`);
+      }
+      const token = loginRes.data.access_token;
+      const registeredUser = loginRes.data.user;
+      setTestUser(registeredUser);
+      setTestToken(token);
+      setSteps((prev) => prev.map((s) => (s.step === 3 ? { ...s, status: 'passed', response: { access_token: `${token.slice(0, 32)}...`, token_type: 'bearer' } } : s)));
+
+      // Step 4: Profile
+      setSteps((prev) => prev.map((s) => (s.step === 4 ? { ...s, status: 'running' } : s)));
+      await new Promise((r) => setTimeout(r, 350));
+      const profRes = await backendEngine.handleRequest('GET', '/api/users/profile', {}, null, `Bearer ${token}`);
+      if (profRes.status !== 200) throw new Error(`Profile check failed with status ${profRes.status}`);
+      setSteps((prev) => prev.map((s) => (s.step === 4 ? { ...s, status: 'passed', response: profRes.data } : s)));
+
+      // Step 5: Test RBAC Security (Should return 403 Forbidden for new user!)
+      setSteps((prev) => prev.map((s) => (s.step === 5 ? { ...s, status: 'running' } : s)));
+      await new Promise((r) => setTimeout(r, 400));
+      const rbacRes = await backendEngine.handleRequest('POST', '/api/products', {}, {
+        name: 'Unauthorized Product Test',
+        category: 'Rings',
+        price: 999,
+        metalType: 'Gold',
+        polishType: 'High Polish',
+      }, `Bearer ${token}`);
+      if (rbacRes.status !== 403) {
+        throw new Error(`Expected 403 Forbidden for non-admin product creation, got ${rbacRes.status}`);
+      }
+      setSteps((prev) => prev.map((s) => (s.step === 5 ? { 
+        ...s, 
+        status: 'passed', 
+        response: { status: 403, detail: rbacRes.data?.detail || 'Admin role required' } 
+      } : s)));
+
+      // Step 6: Create Order
+      setSteps((prev) => prev.map((s) => (s.step === 6 ? { ...s, status: 'running' } : s)));
+      await new Promise((r) => setTimeout(r, 400));
+      const orderRes = await backendEngine.handleRequest('POST', '/api/orders', {}, {
+        items: [
+          {
+            productId: 1,
+            name: 'Celestial Solitaire Diamond Ring',
+            price: 1125.0,
+            quantity: 1,
+            imageUrl: 'https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=600',
+          },
+        ],
+        totalPrice: 1125.0,
+        paymentStatus: 'PAID',
+        address: '22 Park Avenue, New York, NY',
+      }, `Bearer ${token}`);
+      if (orderRes.status !== 201) throw new Error(`Order placement failed with status ${orderRes.status}`);
+      setSteps((prev) => prev.map((s) => (s.step === 6 ? { ...s, status: 'passed', response: orderRes.data } : s)));
+
+      // Step 7: Fetch Orders
+      setSteps((prev) => prev.map((s) => (s.step === 7 ? { ...s, status: 'running' } : s)));
+      await new Promise((r) => setTimeout(r, 350));
+      const ordersRes = await backendEngine.handleRequest('GET', '/api/orders', {}, null, `Bearer ${token}`);
+      if (ordersRes.status !== 200) throw new Error(`Order list retrieval failed with status ${ordersRes.status}`);
+      setSteps((prev) => prev.map((s) => (s.step === 7 ? { ...s, status: 'passed', response: { total_orders: ordersRes.data.length, orders: ordersRes.data } } : s)));
+
+    } catch (err: any) {
+      console.error(err);
+      setSteps((prev) => prev.map((s) => (s.status === 'running' ? { ...s, status: 'failed', details: err.message } : s)));
+    } finally {
+      setIsRunningTest(false);
+    }
+  };
+
+  // Handle manual new user creation
+  const handleManualRegister = async (e: FormEvent) => {
+    e.preventDefault();
+    setManualLoading(true);
+    setManualResult(null);
+
+    try {
+      // 1. Register
+      const regRes = await backendEngine.handleRequest('POST', '/api/users/register', {}, {
+        name: manualForm.name,
+        email: manualForm.email,
+        password: manualForm.password,
+        role: manualForm.role,
+      });
+
+      if (regRes.status !== 201) {
+        setManualResult({ success: false, message: regRes.data?.detail || 'Registration failed' });
+        setManualLoading(false);
+        return;
+      }
+
+      // 2. Login
+      const loginRes = await backendEngine.handleRequest('POST', '/api/users/login', {}, {
+        email: manualForm.email,
+        password: manualForm.password,
+      });
+
+      if (loginRes.status === 200 && loginRes.data?.access_token) {
+        setManualResult({
+          success: true,
+          message: `User ${manualForm.name} registered and authenticated successfully!`,
+          user: loginRes.data.user,
+          token: loginRes.data.access_token,
+        });
+      } else {
+        setManualResult({ success: false, message: 'User registered, but auto-login failed.' });
+      }
+    } catch (err: any) {
+      setManualResult({ success: false, message: err.message || 'Error creating user' });
+    } finally {
+      setManualLoading(false);
+    }
+  };
+
+  const registeredUsers = backendEngine.getStorefrontUsers();
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
+      <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden my-6 flex flex-col max-h-[90vh]">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/80">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
+              <UserCheck className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <span>New User Verification & Testing Hub</span>
+                <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-300">
+                  FastAPI Auth Flow
+                </span>
+              </h3>
+              <p className="text-xs text-slate-400">
+                Verify registration, duplicate email handling, JWT auth, RBAC boundary, and order creation.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={onClose}
+            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Sub Navigation */}
+        <div className="flex border-b border-slate-800 bg-slate-950/40 px-6 pt-2 gap-2">
+          <button
+            onClick={() => setActiveSubTab('automated')}
+            className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeSubTab === 'automated'
+                ? 'border-blue-400 text-blue-400 bg-blue-500/5'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Automated 7-Step Diagnostic</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('manual')}
+            className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeSubTab === 'manual'
+                ? 'border-blue-400 text-blue-400 bg-blue-500/5'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            <span>Register Custom User</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('directory')}
+            className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeSubTab === 'directory'
+                ? 'border-blue-400 text-blue-400 bg-blue-500/5'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Users Directory ({registeredUsers.length})</span>
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <div className="p-6 overflow-y-auto space-y-5 flex-1">
+          {activeSubTab === 'automated' && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-950 p-4 rounded-xl border border-slate-800">
+                <div>
+                  <h4 className="text-sm font-bold text-white">Full Lifecycle New User Verification</h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Generates a new test account, validates credentials, enforces RBAC 403 block, and completes an order.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={runAutomatedCheck}
+                    disabled={isRunningTest}
+                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all shadow-md cursor-pointer disabled:opacity-50"
+                  >
+                    {isRunningTest ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Play className="w-3.5 h-3.5 fill-white" />
+                    )}
+                    <span>{isRunningTest ? 'Running Flow...' : 'Start New User Check'}</span>
+                  </button>
+
+                  {testUser && testToken && (
+                    <button
+                      onClick={() => {
+                        onSelectUser(testUser, testToken);
+                        onClose();
+                      }}
+                      className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all shadow-sm cursor-pointer"
+                    >
+                      <UserCheck className="w-3.5 h-3.5" />
+                      <span>Switch to This User</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Steps List */}
+              <div className="space-y-2.5">
+                {steps.map((s) => (
+                  <div
+                    key={s.step}
+                    className="p-3.5 rounded-xl border bg-slate-950/60 border-slate-800/80 transition-all flex flex-col gap-2"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 shrink-0">
+                          {s.status === 'passed' ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          ) : s.status === 'running' ? (
+                            <RefreshCw className="w-4 h-4 text-blue-400 animate-spin" />
+                          ) : s.status === 'failed' ? (
+                            <XCircle className="w-4 h-4 text-rose-400" />
+                          ) : (
+                            <div className="w-4 h-4 rounded-full border border-slate-700 flex items-center justify-center text-[10px] text-slate-500 font-mono">
+                              {s.step}
+                            </div>
+                          )}
+                        </div>
+
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-slate-200">
+                              Step {s.step}: {s.title}
+                            </span>
+                            <span className="text-[10px] font-mono font-semibold px-2 py-0.2 rounded bg-slate-800 text-amber-300 border border-slate-700">
+                              {s.endpoint}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400 mt-0.5">{s.details}</p>
+                        </div>
+                      </div>
+
+                      <span className={`text-[10px] font-mono uppercase font-bold px-2 py-0.5 rounded ${
+                        s.status === 'passed' 
+                          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                          : s.status === 'running'
+                          ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
+                          : s.status === 'failed'
+                          ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                          : 'text-slate-500'
+                      }`}>
+                        {s.status}
+                      </span>
+                    </div>
+
+                    {/* Response snippet if available */}
+                    {s.response && (
+                      <div className="mt-1 p-2 bg-slate-900 rounded-lg font-mono text-[11px] text-slate-300 overflow-x-auto border border-slate-800">
+                        <span className="text-[10px] text-slate-500 block mb-1">FastAPI Response:</span>
+                        <pre className="whitespace-pre-wrap">{JSON.stringify(s.response, null, 2)}</pre>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeSubTab === 'manual' && (
+            <div className="space-y-4">
+              <form onSubmit={handleManualRegister} className="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-4">
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <UserPlus className="w-4 h-4 text-blue-400" />
+                    <span>Register a Real New User</span>
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    This triggers `POST /api/users/register` with salted bcrypt hash in the backend engine, then obtains a real JWT token.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-slate-400 block mb-1">Full Name</label>
+                    <input
+                      type="text"
+                      required
+                      value={manualForm.name}
+                      onChange={(e) => setManualForm({ ...manualForm, name: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-slate-400 block mb-1">Email Address (Unique)</label>
+                    <input
+                      type="email"
+                      required
+                      value={manualForm.email}
+                      onChange={(e) => setManualForm({ ...manualForm, email: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-slate-400 block mb-1">Password</label>
+                    <input
+                      type="password"
+                      required
+                      value={manualForm.password}
+                      onChange={(e) => setManualForm({ ...manualForm, password: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-slate-400 block mb-1">Role Permission</label>
+                    <select
+                      value={manualForm.role}
+                      onChange={(e) => setManualForm({ ...manualForm, role: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="user">Standard User (Shopping & Orders)</option>
+                      <option value="admin">Administrator (Catalog CRUD & All Orders)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManualForm({
+                        name: 'Nikhil Kumar',
+                        email: `nikhil.${Math.floor(100 + Math.random() * 900)}@example.com`,
+                        password: 'Password@2026!',
+                        role: 'user',
+                      });
+                    }}
+                    className="text-xs text-slate-400 hover:text-slate-200 underline cursor-pointer"
+                  >
+                    Generate Random New Email
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={manualLoading}
+                    className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-all shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {manualLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <UserPlus className="w-3.5 h-3.5" />}
+                    <span>Register & Sign In</span>
+                  </button>
+                </div>
+              </form>
+
+              {manualResult && (
+                <div className={`p-4 rounded-xl border text-xs ${
+                  manualResult.success 
+                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' 
+                    : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-bold">
+                      {manualResult.success ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                      <span>{manualResult.message}</span>
+                    </div>
+
+                    {manualResult.success && manualResult.user && manualResult.token && (
+                      <button
+                        onClick={() => {
+                          onSelectUser(manualResult.user!, manualResult.token!);
+                          onClose();
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-1.5 rounded-lg cursor-pointer transition-all"
+                      >
+                        Switch to {manualResult.user.name}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeSubTab === 'directory' && (
+            <div className="space-y-3">
+              <p className="text-xs text-slate-400">
+                Currently registered users in the database. Notice how new users persist with their assigned role:
+              </p>
+              <div className="divide-y divide-slate-800 border border-slate-800 rounded-xl overflow-hidden bg-slate-950">
+                {registeredUsers.map((u) => {
+                  const isCurrent = currentUserId === u.id;
+                  return (
+                    <div key={u.id} className="p-3.5 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-white">{u.name}</span>
+                          <span className={`text-[10px] uppercase font-bold px-2 py-0.2 rounded ${
+                            u.role === 'admin' 
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' 
+                              : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                          }`}>
+                            {u.role}
+                          </span>
+                          {isCurrent && (
+                            <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.2 rounded border border-emerald-500/20">
+                              Active Session
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs font-mono text-slate-400 mt-0.5">{u.email}</p>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          const token = backendEngine.generateJwt(u);
+                          onSelectUser(u, token);
+                          onClose();
+                        }}
+                        className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                          isCurrent
+                            ? 'bg-slate-800 text-slate-400 cursor-default'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white'
+                        }`}
+                      >
+                        {isCurrent ? 'Current' : 'Log in as User'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
