@@ -1,0 +1,6 @@
+from .user_routes import router as user_router
+from .product_routes import router as product_router
+from .category_routes import router as category_router
+from .order_routes import router as order_router
+
+__all__ = ["user_router", "product_router", "category_router", "order_router"]
