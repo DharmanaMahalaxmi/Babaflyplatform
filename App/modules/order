@@ -1,0 +1,26 @@
+import json
+from sqlalchemy import Column, Integer, Float, String, Text, DateTime, ForeignKey
+from datetime import datetime
+from app.config.database import Base
+
+class Order(Base):
+    __tablename__ = "orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    userId = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    _items = Column("items", Text, nullable=False)  # JSON serialized list of order items
+    totalPrice = Column(Float, nullable=False)
+    paymentStatus = Column(String(50), default="PENDING", nullable=False)  # PENDING, PAID, FAILED, DELIVERED
+    address = Column(String(300), nullable=False)
+    createdAt = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    @property
+    def items(self):
+        try:
+            return json.loads(self._items)
+        except Exception:
+            return []
+
+    @items.setter
+    def items(self, value):
+        self._items = json.dumps(value)
