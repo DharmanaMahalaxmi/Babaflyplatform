@@ -1,0 +1,161 @@
+import { useState } from 'react';
+import { Header, AppTab } from './components/Header';
+import { ApiExplorer } from './components/ApiExplorer';
+import { StorefrontDemo } from './components/StorefrontDemo';
+import { AdminPortal } from './components/AdminPortal';
+import { NewUserChecker } from './components/NewUserChecker';
+import { TestRunner } from './components/TestRunner';
+import { CodeExplorer } from './components/CodeExplorer';
+import { SubmissionGuide } from './components/SubmissionGuide';
+import { downloadPythonProjectZip } from './utils/zipExporter';
+import { User } from './types';
+import { backendEngine } from './backend/engine';
+
+export default function App() {
+  const [activeTab, setActiveTab] = useState<AppTab>('user_portal');
+  const [isNewUserCheckerOpen, setIsNewUserCheckerOpen] = useState<boolean>(false);
+
+  // Default initial session: pre-authenticated for immediate usability
+  const [currentUser, setCurrentUser] = useState<User | null>({
+    id: 1,
+    name: 'BabaFly Administrator',
+    email: 'admin@babafly.com',
+    role: 'admin',
+    created_at: '2026-08-01T00:00:00.000Z',
+  });
+
+  const [jwtToken, setJwtToken] = useState<string | null>(() => {
+    return backendEngine.generateJwt({
+      id: 1,
+      name: 'BabaFly Administrator',
+      email: 'admin@babafly.com',
+      role: 'admin',
+      created_at: '2026-08-01T00:00:00.000Z',
+    });
+  });
+
+  const handleLoginDemo = (role: 'admin' | 'user') => {
+    if (role === 'admin') {
+      const user: User = {
+        id: 1,
+        name: 'BabaFly Administrator',
+        email: 'admin@babafly.com',
+        role: 'admin',
+        created_at: '2026-08-01T00:00:00.000Z',
+      };
+      setCurrentUser(user);
+      setJwtToken(backendEngine.generateJwt(user));
+    } else {
+      const user: User = {
+        id: 2,
+        name: 'Priya Sharma',
+        email: 'user@babafly.com',
+        role: 'user',
+        created_at: '2026-08-05T00:00:00.000Z',
+      };
+      setCurrentUser(user);
+      setJwtToken(backendEngine.generateJwt(user));
+    }
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setJwtToken(null);
+  };
+
+  const handleSetJwtToken = (token: string | null, user: User | null) => {
+    setJwtToken(token);
+    setCurrentUser(user);
+  };
+
+  const handleSelectNewUser = (user: User, token: string) => {
+    setCurrentUser(user);
+    setJwtToken(token);
+    if (user.role === 'admin') {
+      setActiveTab('admin_portal');
+    } else {
+      setActiveTab('user_portal');
+    }
+  };
+
+  const handleDownloadZip = () => {
+    downloadPythonProjectZip();
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-amber-500/30 selection:text-amber-300">
+      <Header
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        currentUser={currentUser}
+        onLoginDemo={handleLoginDemo}
+        onLogout={handleLogout}
+        onDownloadZip={handleDownloadZip}
+        onOpenNewUserChecker={() => setIsNewUserCheckerOpen(true)}
+      />
+
+      <main className="flex-1">
+        {/* Separated User Portal (Storefront & Customer Orders) */}
+        {activeTab === 'user_portal' && (
+          <StorefrontDemo
+            currentUser={currentUser}
+            jwtToken={jwtToken}
+            onLoginDemo={handleLoginDemo}
+            onOpenAdminPortal={() => setActiveTab('admin_portal')}
+            onOpenNewUserChecker={() => setIsNewUserCheckerOpen(true)}
+          />
+        )}
+
+        {/* Separated Admin Portal (Catalog CRUD, Platform Orders, Users Directory) */}
+        {activeTab === 'admin_portal' && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <AdminPortal
+              currentUser={currentUser}
+              jwtToken={jwtToken}
+              onLoginDemo={handleLoginDemo}
+              onOpenNewUserChecker={() => setIsNewUserCheckerOpen(true)}
+              onSwitchToStorefront={() => setActiveTab('user_portal')}
+            />
+          </div>
+        )}
+
+        {/* API Explorer */}
+        {activeTab === 'explorer' && (
+          <ApiExplorer
+            currentUser={currentUser}
+            jwtToken={jwtToken}
+            onSetJwtToken={handleSetJwtToken}
+          />
+        )}
+
+        {/* Pytest Suite */}
+        {activeTab === 'tests' && <TestRunner />}
+
+        {/* Code Explorer */}
+        {activeTab === 'code' && <CodeExplorer onDownloadZip={handleDownloadZip} />}
+
+        {/* Submission Guide */}
+        {activeTab === 'submission' && <SubmissionGuide />}
+      </main>
+
+      {/* New User Verification Modal */}
+      <NewUserChecker
+        isOpen={isNewUserCheckerOpen}
+        onClose={() => setIsNewUserCheckerOpen(false)}
+        onSelectUser={handleSelectNewUser}
+        currentUserId={currentUser?.id}
+      />
+
+      <footer className="border-t border-slate-900 bg-slate-950/80 py-6 text-center text-xs text-slate-500">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <p>
+            BabaFly Backend Platform • InfoBharatInterns Python Internship Project
+          </p>
+          <p className="font-mono text-slate-400">
+            FastAPI • PostgreSQL • SQLAlchemy • JWT Auth • bcrypt • Pytest
+          </p>
+        </div>
+      </footer>
+    </div>
+  );
+}
