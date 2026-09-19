@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: babafly_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: babafly_user
+      POSTGRES_PASSWORD: babafly_password
+      POSTGRES_DB: babafly_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  api:
+    build: .
+    container_name: babafly_fastapi_backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://babafly_user:babafly_password@db:5432/babafly_db
+      - SECRET_KEY=babafly-production-jwt-secret-key-2026
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:
