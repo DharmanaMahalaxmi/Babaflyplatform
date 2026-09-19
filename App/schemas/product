@@ -1,0 +1,45 @@
+from pydantic import BaseModel, Field
+from datetime import datetime
+from typing import Optional, List
+
+class ProductBase(BaseModel):
+    name: str = Field(..., min_length=2, max_length=200, example="Royal Diamond Solitaire Ring")
+    description: Optional[str] = Field(None, example="Exquisite 18K gold ring with certified brilliant diamond.")
+    category: str = Field(..., example="Rings")
+    price: float = Field(..., gt=0, example=899.99)
+    discount: float = Field(0.0, ge=0, le=100, example=10.0)
+    stock: int = Field(0, ge=0, example=25)
+    rating: float = Field(4.5, ge=0, le=5.0, example=4.8)
+    metalType: str = Field(..., example="Gold")      # Gold, Silver, Platinum, Rose Gold
+    polishType: str = Field(..., example="High Polish") # High Polish, Matte, Antique
+    imageUrl: Optional[str] = Field(None, example="https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=600")
+
+class ProductCreate(ProductBase):
+    pass
+
+class ProductUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    price: Optional[float] = Field(None, gt=0)
+    discount: Optional[float] = Field(None, ge=0, le=100)
+    stock: Optional[int] = Field(None, ge=0)
+    rating: Optional[float] = Field(None, ge=0, le=5.0)
+    metalType: Optional[str] = None
+    polishType: Optional[str] = None
+    imageUrl: Optional[str] = None
+
+class ProductOut(ProductBase):
+    id: int
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+class ProductListResponse(BaseModel):
+    total: int
+    page: int
+    limit: int
+    totalPages: int
+    products: List[ProductOut]
