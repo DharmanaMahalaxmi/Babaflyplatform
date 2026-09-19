@@ -1,0 +1,48 @@
+from sqlalchemy.orm import Session
+from fastapi import HTTPException, status
+from app.models.order import Order
+from app.models.user import User
+from app.schemas.order import OrderCreate
+from app.utils.logger import logger
+
+class OrderService:
+    @staticmethod
+    def create_order(db: Session, order_data: OrderCreate, current_user: User):
+        items_payload = [item.dict() for item in order_data.items]
+        
+        order = Order(
+            userId=current_user.id,
+            totalPrice=order_data.totalPrice,
+            paymentStatus=order_data.paymentStatus or "PAID",
+            address=order_data.address,
+        )
+        order.items = items_payload
+
+        db.add(order)
+        db.commit()
+        db.refresh(order)
+        logger.info(f"Order placed: id={order.id}, userId={current_user.id}, total={order.totalPrice}")
+        return order
+
+    @staticmethod
+    def get_user_orders(db: Session, user: User):
+        # Admin can view all orders, standard user views their own orders
+        if user.role.lower() == "admin":
+            return db.query(Order).order_by(Order.createdAt.desc()).all()
+        return db.query(Order).filter(Order.userId == user.id).order_by(Order.createdAt.desc()).all()
+
+    @staticmethod
+    def get_order_by_id(db: Session, order_id: int, current_user: User):
+        order = db.query(Order).filter(Order.id == order_id).first()
+        if not order:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Order with id {order_id} not found"
+            )
+        # Check permissions: only order owner or admin can view
+        if order.userId != current_user.id and current_user.role.lower() != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to access this order"
+            )
+        return order
