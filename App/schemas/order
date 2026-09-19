@@ -1,0 +1,28 @@
+from pydantic import BaseModel, Field
+from datetime import datetime
+from typing import List, Optional, Any
+
+class OrderItem(BaseModel):
+    productId: int = Field(..., example=1)
+    name: str = Field(..., example="Royal Diamond Solitaire Ring")
+    price: float = Field(..., example=899.99)
+    quantity: int = Field(1, ge=1, example=1)
+    imageUrl: Optional[str] = None
+
+class OrderCreate(BaseModel):
+    items: List[OrderItem] = Field(..., min_items=1)
+    totalPrice: float = Field(..., gt=0, example=899.99)
+    address: str = Field(..., min_length=5, example="123 Luxury Avenue, Beverly Hills, CA")
+    paymentStatus: Optional[str] = Field("PAID", example="PAID")
+
+class OrderOut(BaseModel):
+    id: int
+    userId: int
+    items: List[Any]
+    totalPrice: float
+    paymentStatus: str
+    address: str
+    createdAt: datetime
+
+    class Config:
+        from_attributes = True
